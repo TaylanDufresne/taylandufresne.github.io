@@ -360,14 +360,14 @@
                         })
                         .on('mousedown', function () {
                             width = parseInt(secondView.select('.test').attr('width'))
-                            secondView.select('.test').attr('x', Math.max(0, Math.min(d3.event.clientX - width / 2, w - width)))
+                            secondView.select('.test').attr('x', Math.max(0, Math.min(d3.pointer(event)[0] - width / 2, w - width)))
                             dragging = true
 
                         })
                         .on('mousemove', function () {
                             width = parseInt(secondView.select('.test').attr('width'))
                             if (dragging) {
-                                secondView.select('.test').attr('x', Math.max(0, Math.min(d3.event.clientX - width / 2, w - width)))
+                                secondView.select('.test').attr('x', Math.max(0, Math.min(d3.pointer(event)[0] - width / 2, w - width)))
 
                                 // Commented out for performance
                             //    updateThirdView()
@@ -482,19 +482,19 @@
                         .on('mousedown', function () {
                             dragging = true
                             width = parseInt(thirdView.select('.selector').attr('width'))
-                            thirdView.select('.selector').attr('x', Math.max(0, Math.min(d3.event.clientX - width, w - width)))
+                            thirdView.select('.selector').attr('x', Math.max(0, Math.min(d3.pointer(event)[0] - width, w - width)))
 
                         })
                         .on('mouseup', function () {
                             dragging = false
                             width = parseInt(thirdView.select('.selector').attr('width'))
-                            thirdView.select('.selector').attr('x', Math.max(0, Math.min(d3.event.clientX - width, w - width)))
+                            thirdView.select('.selector').attr('x', Math.max(0, Math.min(d3.pointer(event)[0] - width, w - width)))
                             updateFourthView()
                         })
                         .on('mousemove', function () {
                             if (dragging) {
                                 width = parseInt(thirdView.select('.selector').attr('width'))
-                                thirdView.select('.selector').attr('x', Math.max(0, Math.min(d3.event.clientX - width , w - width)))
+                                thirdView.select('.selector').attr('x', Math.max(0, Math.min(d3.pointer(event)[0] - width , w - width)))
                                 updateFourthView()
                             }
                         })
