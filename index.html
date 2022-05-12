@@ -43,7 +43,7 @@
 
         var subset = []
 
-        d3.text("at_coordinate.gff")
+        d3.text("./at_coordinate.gff")
             .then(function (data) {
                 temporary = data.split(/\n/)
                 dataset = temporary.map(function (d) {
