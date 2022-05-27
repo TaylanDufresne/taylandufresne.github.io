@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Gene Density Map</title>
+    <script type="text/javascript" src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.5.0.js"></script>
+
+</head>
+<style>
+    .slider {
+        width: 100%;
+    }
+</style>
+
+
+<body style="background-color: #141414;">
+
+    <div class="slidecontainer">
+        <input type="range" min="1" max="100" value="10" width="1200" class="slider" id="sample_density">
+        <div id="density_value" style="color:white">Sampling every 10 -th Gene</div>
+    </div>
+    <script type="text/javascript">
+        
+        //Width and height for the SVG elements
+        var w = $( document ).width() - 10;
+        var h = 180;
+
+        console.log(w)
+
+        //Creating SVG elements for the views
+        var firstView = d3.select("body")
+            .append("svg")
+            .attr("width", w)
+            .attr("height", h);
+
+        var secondView = d3.select("body")
+            .append("svg")
+            .attr("width", w)
+            .attr("height", h);
+
+        var thirdView = d3.select("body")
+            .append("svg")
+            .attr("width", w)
+            .attr("height", h);
+
+        var fourthView = d3.select("body")
+            .append("svg")
+            .attr("width", w)
+            .attr("height", h);
+
+        var dataset
+        
+        var chromosomeOptions = ["at1", "at2", "at3", "at4", "at5"]
+
+        var selection = "at1"
+
+        var subset = []
+
+        d3.text("at_coordinate.gff")
+            .then(function (data) {
+                temporary = data.split(/\n/)
+                dataset = temporary.map(function (d) {
+                    info = d.split('\t')
+                    var template = {
+                        chromosome: info[0],
+                        start: info[2],
+                        end: info[3],
+                        key: info[1]
+                    }
+                    return template
+                });
+            
+                var trash = dataset.pop()
+                console.log(trash)
+                var first = dataset.filter(function (d) {
+                    return d.chromosome == "at1"
+                });
+                var second = dataset.filter(function (d) {
+                    return d.chromosome == "at2"
+                });
+                var third = dataset.filter(function (d) {
+                    return d.chromosome == "at3"
+                });
+                var fourth = dataset.filter(function (d) {
+                    return d.chromosome == "at4"
+                });
+                var fifth = dataset.filter(function (d) {
+                    return d.chromosome == "at5"
+                });
+
+                var colour = d3.scaleOrdinal().domain(chromosomeOptions)
+                    .range(["gold", "blue", "red", "green", "orange"])
+
+                var split = w / 5
+
+                // Maximum chromosome values for building the scales
+
+                firstCap = Math.max.apply(Math, first.map(function(d){
+                    return d.end
+                }))
+                secondCap = Math.max.apply(Math, second.map(function(d){
+                    return d.end
+                }))
+                thirdCap = Math.max.apply(Math, third.map(function(d){
+                    return d.end
+                }))
+                fourthCap = Math.max.apply(Math, fourth.map(function(d){
+                    return d.end
+                }))
+                fifthCap = Math.max.apply(Math, fifth.map(function(d){
+                    return d.end
+                }))
+
+                // Temporary solution, this can be generalized
+                var firstScale = d3.scaleLinear()
+                    .domain([0, firstCap])
+                    .range([0, split])
+
+                var secondScale = d3.scaleLinear()
+                    .domain([0, secondCap])
+                    .range([split, split * 2])
+
+                var thirdScale = d3.scaleLinear()
+                    .domain([0, thirdCap])
+                    .range([split * 2, split * 3])
+
+                var fourthScale = d3.scaleLinear()
+                    .domain([0, fourthCap])
+                    .range([split * 3, split * 4])
+
+                var fifthScale = d3.scaleLinear()
+                    .domain([0, fifthCap])
+                    .range([split * 4, split * 5])
+
+                var reverseFirstScale = d3.scaleLinear()
+                    .domain([0, w])
+                    .range([0, firstCap])
+
+                var reverseSecondScale = d3.scaleLinear()
+                    .domain([0, w])
+                    .range([0, secondCap])
+
+                var reverseThirdScale = d3.scaleLinear()
+                    .domain([0, w])
+                    .range([0, thirdCap])
+
+                var reverseFourthScale = d3.scaleLinear()
+                    .domain([0, w])
+                    .range([0, fourthCap])
+
+                var reverseFifthScale = d3.scaleLinear()
+                    .domain([0, w])
+                    .range([0, fifthCap])
+
+                var wScale = d3.scaleLinear()
+
+                // var intensityScale = d3.scaleLinear()
+                //     .domain([firstCap/50,100])
+
+                // for averaging, take ~100, the first start, the last end, and return an intensity value?
+                // intensity is likely a no go, numbers are massive enough to not scale great, so =>
+                
+                // or we take set increments and the density is how many genes are present in them
+                
+                updateFirstView()
+                // Selection window
+                var dragging = false
+
+                secondView.append("rect")
+                    .attr('x', 30)
+                    .attr('y', 25)
+                    .attr('width', 100)
+                    .attr('height', 100)
+                    .attr('fill', 'gray')
+                    .attr('opacity', 0.5)
+                    .classed('test', true)
+
+                updateSecondView()
+
+                var slider = document.getElementById("sample_density")
+
+                slider.oninput = function(){
+                    updateFirstView()
+                }
+
+                function updateFirstView(){
+
+                    var density = document.getElementById("sample_density").value
+                    document.getElementById("density_value").innerHTML = "Sampling every " + density + " -th Gene"
+                    
+
+                    firstView.selectAll("rect").remove()
+                    firstView.selectAll("text").remove()
+                    firstView.selectAll(".gene").remove()
+
+                    firstView.selectAll("rect")
+                        .data(dataset.filter(function(d,i){
+                            return i % density == 0
+                        }))
+                        .enter()
+                        .append("rect")
+                        .attr("x", function (d) {
+                            chosenScale = chooseDataset(d.chromosome)[1]
+                            var index = chromosomeOptions.indexOf(d.chromosome)
+                            chosenScale.range([index * split, (index+1)*split])
+                            return chosenScale(d.start)
+
+                        })
+                        .attr("y", 50)
+                        .attr("width", function (d) {
+                            distance = d.end - d.start
+                            return firstScale(distance) * density
+                        })
+                        .attr("height", 100)
+                        .attr("fill", function (d) {
+                            return colour(d.chromosome);
+                        })
+                        .classed("gene", true)
+
+                    for (i = 0; i < 5; i++) {
+                        firstView.append("rect")
+                            .attr('width', split)
+                            .attr("y", 50)
+                            .attr("x", i * split)
+                            .attr("height", 100)
+                            .attr("opacity", 0)
+                            .attr("text", "at" + (i + 1))
+                            .attr("fill", "white")
+                            .classed('clickbox', true)
+                            .on('click', function () {
+
+                                if (d3.select(this).attr('opacity') != 0.05) {
+                                    d3.selectAll('.clickbox').attr("opacity", 0)
+                                    d3.select(this).attr("opacity", 0.05)
+                                    selection = d3.select(this).attr("text")
+
+                                    updateSecondView()
+                                }
+
+                            })
+                    }
+
+                    for (i = 0; i < 5; i++) {
+                        firstView.append("text")
+                            .attr("x", (i + 1) * split - (split * .75))
+                            .attr("y", 30)
+                            .attr("text-anchor", "middle")
+                            .style("font-size", "16px")
+                            .style("fill", 'white')
+                            .text(chromosomeOptions[i])
+                    }
+
+                }
+
+            
+                //Functions
+
+                function chooseDataset(chromosome){
+                    switch(chromosome){
+                        case "at1":
+                            return [first, firstScale, reverseFirstScale]
+                        case "at2":
+                            return [second, secondScale, reverseSecondScale]
+                        case "at3":
+                            return [third, thirdScale, reverseThirdScale]
+                        case "at4":
+                            return [fourth,fourthScale, reverseFourthScale]
+                        case "at5":
+                            return [fifth, fifthScale, reverseFifthScale]
+                    }
+
+                }
+
+                function drawScale(view, bottom, top){
+                    
+                    view.selectAll('.scale').remove()
+                    
+                    view.append('rect')
+                        .attr('x', 0)
+                        .attr('y', 130)
+                        .attr('width', w)
+                        .attr('height', 2)
+                        .attr('fill', 'white')
+                        .classed('scale', true)
+
+                    view.append('rect')
+                        .attr('x', 0)
+                        .attr('y', 125)
+                        .attr('width', 2)
+                        .attr('height', 10)
+                        .attr('fill', 'white')
+                        .classed('scale', true)
+
+                    view.append('rect')
+                        .attr('x', w - 2)
+                        .attr('y', 125)
+                        .attr('width', 2)
+                        .attr('height', 10)
+                        .attr('fill', 'white')
+                        .classed('scale', true)
+
+                    view.append('text')
+                        .attr("text-anchor", "left")
+                        .style('font-size', '12px')
+                        .style('fill', 'white')
+                        .text(Math.round(bottom))
+                        .attr('x', 0)
+                        .attr('y', 145)
+                        .classed('scale', true)
+
+                    view.append('text')
+                        .attr("text-anchor", "left")
+                        .style('font-size', '12px')
+                        .style('fill', 'white')
+                        .text(Math.round(top))
+                        .attr('x', w - 55)
+                        .attr('y', 145)
+                        .classed('scale', true)
+                }
+
+                // TODO Combine these two
+                function adaptiveScale(func, inputtedData) {
+
+                    let temp = parseInt(secondView.select('.test').attr('x'))
+                    let width = parseInt(secondView.select('.test').attr('width'))
+
+                    var beginningView = func(temp)
+                    var endView = func(temp + width)
+                    distance = inputtedData.end - inputtedData.start
+
+                    return [beginningView, endView, distance]
+                }
+
+                function secondAdaptiveScale(func) {
+
+                    let largetemp = parseInt(secondView.select('.test').attr('x'))
+                    let largewidth = parseInt(secondView.select('.test').attr('width'))
+
+
+                    let temp = parseInt(thirdView.select('.selector').attr('x'))
+                    let width = parseInt(thirdView.select('.selector').attr('width'))
+
+                    var sliceX = wScale.range([largetemp, largetemp + largewidth]).domain([0, w])(temp)
+                    var sliceWidth = wScale.range([0, largewidth]).domain([0, w])(width)
+
+                    var beginningView = func(sliceX)
+                    var endView = func(sliceX + sliceWidth)
+
+                    return [beginningView, endView]
+                }
+
+                
+                function updateSecondView() {
+
+                    subset.length = 0
+                    secondView.selectAll(".gene").remove()
+
+                    var storedChoice = chooseDataset(selection)
+                    chosenData = storedChoice[0]
+                    chosenScale = storedChoice[1]
+
+                    secondView.selectAll("rect")
+                        .data(chosenData)
+                        .enter()
+                        .append("rect")
+                        .attr("x", function(d){
+                            return chosenScale.range([0, w])(d.start)
+                        })
+                        .attr("y", 25)
+                        .attr("width", function (d) {
+                            distance = d.end - d.start
+                            return chosenScale(distance)
+
+                        })
+                        .attr("height", 100)
+                        .attr("fill", function (d) {
+                            return colour(d.chromosome);
+                        })
+                        .classed('gene', true)
+
+
+                    secondView.append('rect')
+                        .attr('x', 0)
+                        .attr('width', w)
+                        .attr('y', 25)
+                        .attr('height', 100)
+                        .attr('fill', 'yellow')
+                        .attr('opacity', 0)
+                        .on('mouseover', function () {
+                            secondView.selectAll(".test")
+                                .attr('opacity', 0.5)
+                        })
+                        .on('mouseup', function () {
+                            dragging = false
+                            updateThirdView()
+                        })
+                        .on('mouseleave', function () {
+                            if (!dragging) {
+                                secondView.selectAll(".test")
+                                    .attr('opacity', 0.3)
+                            }
+                        })
+                        .on('mousedown', function () {
+                            width = parseInt(secondView.select('.test').attr('width'))
+                            secondView.select('.test').attr('x', Math.max(0, Math.min(d3.pointer(event)[0] - width / 2, w - width)))
+                            dragging = true
+
+                        })
+                        .on('mousemove', function () {
+                            width = parseInt(secondView.select('.test').attr('width'))
+                            if (dragging) {
+                                secondView.select('.test').attr('x', Math.max(0, Math.min(d3.pointer(event)[0] - width / 2, w - width)))
+
+                                // Commented out for performance
+                               updateThirdView()
+                            }
+                        })
+                        .classed('gene', true)
+
+                    secondView.selectAll("text").remove()
+
+                    secondView.append("text")
+                        .attr("x", split - (split * .65))
+                        .attr("y", 20)
+                        .attr("text-anchor", "middle")
+                        .style("font-size", "16px")
+                        .style("fill", "white")
+                        .text("Chromosome: " + selection)
+
+                    var top, bottom
+                    
+                    bottom = chosenData[0].start
+                    top = chosenData[chosenData.length - 1].end
+  
+                    drawScale(secondView, bottom, top)
+                    updateThirdView()
+
+                }
+
+
+                function updateThirdView() {
+      
+                    subset.length = 0
+                    thirdView.selectAll("text").remove()
+                    thirdView.selectAll('.selector').remove()
+                    thirdView.selectAll('.gene').remove()
+
+                    thirdView.append("text")
+                        .attr("x", split - (split * .65))
+                        .attr("y", 20)
+                        .attr("text-anchor", "middle")
+                        .style("font-size", "16px")
+                        .style("fill", "white")
+                        .text("Subregion: " + selection)
+
+                    thirdView.selectAll('.thirdview').remove()
+
+                    var chosenReverseScale, beginningView, endView
+
+                    thirdView.selectAll("rect")
+                        .data(function (d) {
+                            var choice, chosenReverseScale
+
+                            chosenData = chooseDataset(selection)
+
+                            choice = chosenData[0]
+                            chosenReverseScale = chosenData[2]
+
+                            let temp = parseInt(secondView.select('.test').attr('x'))
+                            let width = parseInt(secondView.select('.test').attr('width'))
+
+                            beginningView = chosenReverseScale(temp)
+                            endView = chosenReverseScale(temp + width)
+
+                            return choice
+
+                        })
+                        .enter()
+                        .append("rect")
+                        .attr("x", function (d) {
+                            if (d.end > beginningView && d.start < endView) {
+                                return wScale.range([0, w]).domain([beginningView, endView])(d.start)
+                            }
+                        })
+                        .attr("y", 25)
+                        .attr("width", function (d) {
+                            distance = d.end - d.start
+                            if (d.end > beginningView && d.start < endView) {
+                                subset
+                    .push(d)
+                                return wScale.range([0, w]).domain([0, endView - beginningView])(distance)
+                            }
+
+                        })
+                        .attr("height", 100)
+                        .attr("fill", function (d) {
+                            return colour(d.chromosome);
+                        })
+                        .classed('thirdview', true)
+                        .append('title')
+                        .text(function (d) {
+                            return d.key
+                        })
+
+                    thirdView.append('rect')
+                        .attr('x', 50)
+                        .attr('y', 25)
+                        .attr('height', 100)
+                        .attr('fill', 'white')
+                        .attr('style', 'outline: thin solid white')
+                        .attr('opacity', 0.2)
+                        .attr('width', 20)
+                        .classed('selector', true)
+
+                    // TODO Generalize the viewpane
+                    thirdView.append('rect')
+                        .attr('x', 0)
+                        .attr('width', w)
+                        .attr('y', 25)
+                        .attr('height', 100)
+                        .attr('fill', 'yellow')
+                        .attr('opacity', 0)
+                        .classed('gene', true)
+                        .on('mousedown', function () {
+                            dragging = true
+                            width = parseInt(thirdView.select('.selector').attr('width'))
+                            thirdView.select('.selector').attr('x', Math.max(0, Math.min(d3.pointer(event)[0] - width, w - width)))
+
+                        })
+                        .on('mouseup', function () {
+                            dragging = false
+                            width = parseInt(thirdView.select('.selector').attr('width'))
+                            thirdView.select('.selector').attr('x', Math.max(0, Math.min(d3.pointer(event)[0] - width, w - width)))
+                            updateFourthView()
+                        })
+                        .on('mousemove', function () {
+                            if (dragging) {
+                                width = parseInt(thirdView.select('.selector').attr('width'))
+                                thirdView.select('.selector').attr('x', Math.max(0, Math.min(d3.pointer(event)[0] - width , w - width)))
+                                updateFourthView()
+                            }
+                        })
+
+                        drawScale(thirdView, beginningView, endView)
+                        updateFourthView()
+                }
+
+                function updateFourthView() {
+                    
+            
+                    fourthView.selectAll("text").remove()
+
+                    fourthView.append("text")
+                        .attr("x", split - (split * .75))
+                        .attr("y", 20)
+                        .attr("text-anchor", "middle")
+                        .style("font-size", "16px")
+                        .style("fill", "white")
+                        .text("Genes: " + selection)
+
+                    fourthView.selectAll('.fourthView').remove()
+
+                    var beginningView, endView, javascriptThings
+
+                   javascriptThings = chooseDataset(selection)[2]
+
+                    var scales = secondAdaptiveScale(javascriptThings)
+
+                    beginningView = scales[0]
+                    endView = scales[1]
+                    fourthView.selectAll("rect")
+                        .data(subset)
+                        .enter()
+                        .append("rect")
+                        .attr("x", function (d) {
+                            if (d.end > beginningView && d.start < endView) {
+                                return wScale.range([0, w]).domain([beginningView, endView])(d.start)
+                            }
+                        })
+                        .attr("y", 25)
+                        .attr("width", function (d) {
+                            distance = d.end - d.start
+                            if (d.end > beginningView && d.start < endView) {
+                                return wScale.range([0, w]).domain([0, endView - beginningView])(distance)
+                            }
+                    
+                        })
+                        .attr("height", 100)
+                        .attr("fill", function (d) {
+                            return colour(d.chromosome);
+                        })
+                        .classed('fourthView', true)
+                        .append('title')
+                        .text(function (d) {
+                            return d.key
+                        })
+                        
+                        drawScale(fourthView, beginningView, endView)
+
+                }
+
+            })
+            
+    </script>
+</body>
+
+</html>

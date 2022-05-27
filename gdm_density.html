@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Gene Density Map</title>
+    <script type="text/javascript" src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.js"></script>
+<!--     <script src="node_modules/save-svg-as-png/lib/saveSvgAsPng.js"></script> -->
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.4.1/lib/p5.js"></script>
+
+</head>
+<style>
+    .slider {
+        width: 100%;
+    }
+</style>
+
+
+<body style="background-color: #141414;">
+    <h1 style="color: white">Gene Density Map</h1>
+
+    <div class="slidecontainer">
+        <input type="range" min="1" max="100" value="1" width="1200" class="slider" id="sample_density">
+        <div id="density_value" style="color:white">Gene Sample Rate: 1</div>
+    </div>
+    <div class="searchbar">
+        <input type="text" id="search" placeholder="Search">
+        <button onClick=searchSubmit()>Submit</button>
+    </div>
+    <div>
+        <label for="Genome" style="color: white">Choose a genome:</label>
+        <select name="Genome" id="Genome">
+            <option value="at_coordinate.gff">Aradopsis</option>
+            <option value="bn_coordinate.gff">Brassica</option>
+        </select>
+        <button onClick=pullInfo()>Submit</button>
+    </div>
+    <script type="text/javascript">
+
+        let query
+
+        function searchSubmit() {
+            query = document.getElementById("search").value
+            if (query === "") {
+                window.alert("Please enter a gene.")
+            }
+            else {
+                var present = dataset.findIndex((gene, index) => {
+                    if (gene.key == query)
+                        return true
+                })
+                var searchQuery = dataset[present]
+                selection = searchQuery.chromosome
+
+                var choice = chooseDataset(selection)
+                var scale = choice[1].range([0,w])
+                var reverse = choice[2]
+                updateFirstView()               
+                
+                
+                let width = parseInt(secondView.select('.test').attr('width'))
+
+                secondView.select('.test').attr('x', Math.max(0,scale(searchQuery.start)-width/2))
+
+                let temp = parseInt(secondView.select('.test').attr('x'))
+                
+
+                beginningView = reverse(temp)
+                endView = reverse(temp + width)
+
+                var viewScale = wScale.range([0, w]).domain([beginningView, endView])
+                // console.log(endView)
+                // console.log(beginningView)
+                // console.log("Search: " + searchQuery.start)
+                // console.log(viewScale(searchQuery.start))
+                smallWidth = thirdView.select('.selector').attr('width')
+                thirdView.select('.selector').attr('x', viewScale(searchQuery.start)-smallWidth/2)
+                updateSecondView()
+
+                var mayhaps = fourthView.selectAll('rect').filter((d)=>{
+                    if(d !== undefined){
+                        return d.key == searchQuery.key
+                    }
+                    else{
+                        return false
+                    }
+                })
+                mayhaps.attr("fill", 'white')
+
+            }
+
+        }
+        
+        window.addEventListener('resize', () => {
+            "use strict";
+            window.location.reload();
+        })
+
+        //Width and height for the SVG elements
+        var w = $(document).width() - 10;
+        var h = 180;
+
+
+
+        //Creating SVG elements for the views
+        var firstView = d3.select("body")
+            .append("svg")
+            .attr('viewBox', '0, 0,' + w +', ' + h)
+            .attr('preserveAspectRatio','none')
+            .attr("width", w)
+            .attr("height", h)
+            .classed("firstView", true);
+
+        // ##################################################################################################################################################################3
+
+
+        var image_path = "http://localhost:8888/chromosomal_pngs/chromosomes_"
+        var img_arr = []
+
+        for (var i = 0; i < 13; i++) {
+            img_arr[i] = image_path + (i * 5) + ".png"
+            // console.log(img_arr[i])
+        }
+
+        // var chromosomalMap = firstView.append('image')
+        //     .attr('xlink:href', "http://localhost:8888/chromosomal_pngs/chromosomes_0.png")
+        //     // .style('background-size', w +'px ' + h + 'px')
+        //     // .attr('width', w)
+        //     // .attr('height', h)
+        //     .attr('preserveAspectRatio','none')
+        //     .style('height', '100%')
+        //     .style('width', '100%')
+
+
+
+        var secondView = d3.select("body")
+            .append("svg")
+            .attr("width", w)
+            .attr("height", h)
+            .attr("id", "tosave");
+
+        var thirdView = d3.select("body")
+            .append("svg")
+            .attr("width", w)
+            .attr("height", h);
+
+        var fourthView = d3.select("body")
+            .append("svg")
+            .attr("width", w)
+            .attr("height", h);
+
+        var split;
+
+        var scrolling = false;
+        var mouseX
+
+        var dataset = [];
+
+        let trash, first, second, third, fourth, fifth;
+        let colour, fursCap, secondCap, thirdCap, fourthCap, fifthCap;
+        let firstScale, secondScale, thirdScale, fourthScale, fifthScale;
+        let reverseFirstScale, reverseSecondScale, reverseThirdScale, reverseFourthScale, reverseFifthScale;
+        let wScale, dragging;
+        let generalized = []
+        let chrInfo = []
+        let chromosome_number = 0;
+        var density = 60;
+        let testingWidthScale;
+
+function pullInfo(){
+        d3.text(document.getElementById("Genome").value)
+            .then(function (data) {
+                temporary = data.split(/\n/)
+                dataset = []
+                dataset = temporary.map(function (d) {
+                    info = d.split('\t')
+                    var template = {
+                        chromosome: info[0],
+                        start: info[2],
+                        end: info[3],
+                        key: info[1]
+                    }
+                    return template
+                });
+
+                trash = dataset.pop()
+                generalized.length = 0
+                dataset.forEach((item)=>{
+                    // console.log(item)
+                        if(!generalized.includes(item.chromosome)){
+                            // console.log(item.chromosome)
+                            generalized.push(item.chromosome)
+                            selection = generalized[0]
+                            
+                }
+                })
+                generalized.sort((a,b)=>{
+                    return a.length - b.length || a.localeCompare(b)
+                })
+                // console.log(generalized)
+                chrInfo = []
+                generalized.forEach((chr)=>{
+                    var subset = dataset.filter((d)=>{
+                        return d.chromosome == chr
+                    })
+                    // console.log(subset)
+                
+                    var cap = Math.max.apply(Math, subset.map((d)=>{
+                        return d.end
+                    }))
+                    split = w/generalized.length
+
+                    var scale = d3.scaleLinear().domain([0, cap]).range([chromosome_number*split, (chromosome_number+1)*split])
+                    chromosome_number++;
+                    var reverseScale = d3.scaleLinear().domain([0,w]).range([0,cap])
+                    var temp = {
+                        chromosome: chr,
+                        data: subset,
+                        cap: cap,
+                        scale: scale,
+                        reverseScale: reverseScale
+                    }
+                    // console.log(temp)
+                    chrInfo.push(temp)
+                })
+
+                var max = 0;
+                chrInfo.forEach((d)=>{
+                    max += d.cap
+                    // console.log(d.cap)
+                })
+                
+                // console.log(max)
+
+                testingWidthScale = d3.scaleLinear().domain([0,max]).range([0,w])
+                for(i=0; i<chrInfo.length; i++){
+                    if(i==0){
+                        chrInfo[i].beginning = 0
+                        chrInfo[i].end = testingWidthScale(chrInfo[i].cap)
+                        // console.log("Beginning: " + chrInfo[i].end)
+                    }
+                    else{
+                        chrInfo[i].beginning = chrInfo[i-1].end
+                        chrInfo[i].end = testingWidthScale(chrInfo[i].cap) + chrInfo[i].beginning
+                    }
+                    // console.log(chrInfo[i].beginning)
+                    // console.log(chrInfo[i].end)
+                    chrInfo[i].secondScale = d3.scaleLinear().domain([0, chrInfo[i].cap]).range([chrInfo[i].beginning, chrInfo[i].end])
+
+                }
+                
+                // chrInfo[0].beginning = 0
+                // console.log(chrInfo[2].secondScale(10))
+            
+
+                colour = d3.scaleOrdinal().domain(generalized)
+                    .range(["gold", "blue", "red", "green", "orange"])
+
+
+
+
+                wScale = d3.scaleLinear()
+
+                // var intensityScale = d3.scaleLinear()s
+              
+                // Selection window
+                dragging = false
+
+
+                // For saving png
+
+                // var savetopng = document.getElementById("tosave");
+                // console.log(savetopng)
+                // saveSvgAsPng(savetopng, "chromosome_" +selection +".png")
+
+                // #########################################################################################################################################################################
+
+               
+                
+                updateFirstView()
+                // updateSecondView()
+
+                var slider = document.getElementById("sample_density")
+
+                slider.oninput = function () {
+                    updateFirstView()
+                }
+
+            })
+}
+
+ secondView.append("rect")
+                    .attr('x', 30)
+                    .attr('y', 25)
+                    .attr('width', 100)
+                    .attr('height', 100)
+                    .attr('fill', 'gray')
+                    .attr('style', 'outline: thin solid white')
+                    .attr('opacity', 0.5)
+                    .classed('test', true)
+
+                thirdView.append('rect')
+                .attr('x', 50)
+                .attr('y', 25)
+                .attr('height', 100)
+                .attr('fill', 'white')
+                .attr('style', 'outline: thin solid white')
+                .attr('opacity', 0.2)
+                .attr('width', 20)
+                .classed('selector', true)
+
+    pullInfo()
+        // Use generalized to build this
+        // var chromosomeOptions = ["at1", "at2", "at3", "at4", "at5"]
+        // console.log(generalized)
+        // var selection = generalized[0]
+
+        var subset = []
+
+        function updateFirstView() {
+
+            var density_slider = document.getElementById("sample_density").value
+            document.getElementById("density_value").innerHTML = "Gene Sample Rate: " + density_slider
+
+            var previousX = parseInt(secondView.select('.test').attr('x'))
+            // console.log(previousX)
+            secondView.select('.test')
+            .attr('width', 100 - density_slider + 2)
+            // .attr('x', previousX + 1)
+            thirdView.select('.selector').attr('width', 20 - density_slider/5)
+
+            firstView.selectAll("rect").remove()
+            firstView.selectAll("text").remove()
+            firstView.selectAll(".gene").remove()
+
+            var densityView = []
+            var max = 0
+
+            geneDensityScale = d3.scaleLinear().domain([0,chrInfo[0].cap]).range([0,300/chrInfo.length])
+
+            for(x=0; x<chrInfo.length; x++){
+    
+                numberOfBars = geneDensityScale(chrInfo[x].cap)
+                
+                building = densityViewInfo(chrInfo[x].data, chrInfo[x].cap, 0, numberOfBars)
+
+                if(building[1]>max){
+                    max = building[1]
+                }
+
+                densityView.push(...building[0])
+            }
+            // console.log(densityView)
+            updateSecondView()
+
+
+            var colorscale = d3.scaleLinear().domain([0, max])
+            firstView.selectAll('.gene')
+                // .data(dataset)
+                .data(densityView)
+                .enter()
+                .append('rect')
+                .attr('x', (d,i)=>{
+
+                    return  i* w/densityView.length
+                    // return  chooseDataset(d.chromosome)[4](d.start)
+                    // return 0
+                })
+                .attr('width', function(d){
+                    
+                    return w/densityView.length
+                    // var tempScale = chooseDataset(d.chromosome)[1]
+                    
+                    // return tempScale.range([0,split])(d.end-d.start)
+                })
+                .attr('y',50)
+                .attr('height', 100)
+                .attr('fill', function(d,i){
+                    return colorscale.range(["#141414", colour(d.chromosome)])(d.number)
+                    // return colour(d.chromosome)
+                })
+                .classed("gene",true)
+
+            for (i = 0; i < generalized.length; i++) {
+                firstView.append("rect")
+                    .attr('width', ()=>{
+                        data = chrInfo[i]
+                        // console.log(data.end-data.beginning)
+                        return data.end-data.beginning
+                   })
+                    .attr("y", 50)
+                    .attr("x", ()=>{
+                        data = chrInfo[i];
+
+                        return data.secondScale(data.beginning)
+                   })
+                    .attr("height", 100)
+                    .attr("opacity", 0)
+                    .attr("text", generalized[i])
+                    .attr("fill", "white")
+                    .classed('clickbox', true)
+                    .on('click', function () {
+
+                        if (d3.select(this).attr('opacity') != 0.05) {
+                            d3.selectAll('.clickbox').attr("opacity", 0)
+                            d3.select(this).attr("opacity", 0.05)
+                            selection = d3.select(this).attr("text")
+
+                            updateSecondView()
+                        }
+
+                    })
+            }
+            
+        }
+
+        function chooseDataset(chromosome) {
+            
+            var i = chrInfo.findIndex((d)=>{
+                return d.chromosome == chromosome
+            })
+            // console.log(i)
+            return [chrInfo[i].data, chrInfo[i].scale, chrInfo[i].reverseScale, chrInfo[i].cap, chrInfo[i].secondScale]
+
+        }
+
+        function drawScale(view, bottom, top) {
+
+            // This can absolutely be a loop
+
+            difference = top-bottom
+            section = (w-2)/5
+
+            view.selectAll('.scale').remove()
+                
+            view
+            .selectAll('.scale')
+            .data([1])
+            .enter()
+            .append('rect')
+            .attr('x', 0)
+            .attr('y', 130)
+            .attr('width', w)
+            .attr('height', 2)
+            .attr('fill', 'white')
+            .classed('scale', true)
+            
+            
+                view
+                .selectAll('.scale')
+                .data([1,2,3,4,5,6])
+                .enter()
+                .append('rect')
+                .attr('x', (d,i)=>{
+                    return i*section
+                })
+                .attr('y', 125)
+                .attr('width', 2)
+                .attr('height', 10)
+                .attr('fill', 'white')
+                .classed('scale', true)
+
+                for(i = 0; i< 6; i++){
+                view.append('text')
+                .attr("text-anchor", "left")
+                .style('font-size', '12px')
+                .style('fill', 'white')
+                .text(()=>{
+                    return Math.round(bottom + difference/5 * i)
+                })
+                .attr('x', ()=>{
+                    if(i == 5){
+                        return w-48
+                    }
+                    else{
+                        return i*section
+                    }
+                    })
+                .attr('y', 145)
+                .classed('scale', true)
+                }
+            
+        }
+
+        // TODO Combine these two
+        function adaptiveScale(func, inputtedData) {
+
+            let temp = parseInt(secondView.select('.test').attr('x'))
+            let width = parseInt(secondView.select('.test').attr('width'))
+
+            var beginningView = func(temp)
+            var endView = func(temp + width)
+            distance = inputtedData.end - inputtedData.start
+
+            return [beginningView, endView, distance]
+        }
+
+        function secondAdaptiveScale(func) {
+
+            let largetemp = parseInt(secondView.select('.test').attr('x'))
+            let largewidth = parseInt(secondView.select('.test').attr('width'))
+
+
+            let temp = parseInt(thirdView.select('.selector').attr('x'))
+            let width = parseInt(thirdView.select('.selector').attr('width'))
+
+            var sliceX = wScale.range([largetemp, largetemp + largewidth]).domain([0, w])(temp)
+            var sliceWidth = wScale.range([0, largewidth]).domain([0, w])(width)
+
+            var beginningView = func(sliceX)
+            var endView = func(sliceX + sliceWidth)
+
+            return [beginningView, endView]
+        }
+
+        function densityViewInfo(dataset, cap, start, density){
+        
+            var densityView = []
+            var distance = cap - start
+            var increment = distance/density
+
+            for(i=1; i<= density; i++){
+                var temp = {
+                    start: start + increment*(i-1),
+                    end: start+ increment * i,
+                    number: 0,
+                }
+                densityView.push(temp)
+            }
+
+            var max = 0;
+            // console.log(densityView)
+            dataset.forEach((d)=>{
+                for(i = 0; i< densityView.length; i++){
+                    if(d.start > densityView[i].start && d.start < densityView[i].end){
+                        densityView[i].number++;
+                        densityView[i].chromosome = d.chromosome
+                        if(densityView[i].number > max){
+                            max = densityView[i].number
+                        }
+                    }
+                }
+            })
+            // console.log(dataset)
+
+            return [densityView, max, dataset[0].chromosome]
+        }
+
+        function updateSecondView() {
+
+            // secondView.selectAll('image').remove()
+            // var chromosomalMap2 = secondView.append('image')
+            //     .attr('xlink:href', "http://localhost:8888/chromosomal_pngs/chromosome_" + selection + ".png")
+            //     .attr('width', w)
+            //     .attr('height', h)
+
+            secondView.selectAll("text").remove()
+            
+
+            secondView.append("text")
+                .attr("x", split - (split * .65))
+                .attr("y", 20)
+                .attr("text-anchor", "middle")
+                .style("font-size", "16px")
+                .style("fill", "white")
+                .text("Chromosome: " + selection)
+
+            subset.length = 0
+            secondView.selectAll(".gene").remove()
+
+            var storedChoice = chooseDataset(selection)
+            chosenData = storedChoice[0]
+            chosenScale = storedChoice[1]
+            chosenCap = storedChoice[3]
+
+           
+
+            temp = densityViewInfo(chosenData, chosenCap, 0, density)
+            densityView = temp[0]
+            max = temp[1]
+            // console.log(densityView)
+
+            var colorscale = d3.scaleLinear().domain([0, max]).range(["#141414", colour(chosenData[0].chromosome)])
+
+            secondView.selectAll('.gene')
+                .data(densityView)
+                .enter()
+                .append('rect')
+                .attr('x', (d,i)=>{
+                    // console.log(i)
+                    return (w/density) * i
+                    // return 0
+                })
+                .attr('width', function(d){
+                    return w/density
+                })
+                .attr('y',25)
+                .attr('height', 100)
+                .attr('fill', function(d){
+                    return colorscale(d.number)
+                })
+                .classed("gene",true)
+
+            secondView.select(".test").raise()
+
+                // This can probably just be raised each time
+            secondView.append('rect')
+                .attr('x', 0)
+                .attr('width', w)
+                .attr('y', 25)
+                .attr('height', 100)
+                .attr('fill', 'yellow')
+                .attr('opacity', 0)
+                .on('mouseover', function () {
+                    secondView.selectAll(".test")
+                        .attr('opacity', 0.5)
+                })
+                .on('mouseup', function () {
+                    dragging = false
+                    scrolling = false
+                    // console.log(densityView.length)
+                    updateThirdView()
+                })
+                .on('mouseleave', function () {
+                    if (!dragging) {
+                        secondView.selectAll(".test")
+                            .attr('opacity', 0.3)
+                    }
+                })
+                .on('mousedown', function () {
+                    width = parseInt(secondView.select('.test').attr('width'))
+                    box = parseInt(secondView.select('.test').attr('x'))
+                    var clickLocation = d3.pointer(event)[0]
+                    if(clickLocation >= box && clickLocation <= box + width){
+                        dragging = true
+                        secondView.select('.test').attr('x', Math.max(0, Math.min(d3.pointer(event)[0] - width/2, w - width)))
+                    }
+                    else{
+                        mouseX = clickLocation
+                        scrolling = true
+                    }
+
+                })
+                .on('mousemove', function () {
+                    if (dragging) {
+                        width = parseInt(secondView.select('.test').attr('width'))
+                        secondView.select('.test').attr('x', Math.max(0, Math.min(d3.pointer(event)[0] - width/2, w - width)))
+                        updateThirdView()
+                    }
+                    else if(scrolling){
+                        deltaX = (mouseX - d3.pointer(event)[0])/10
+        
+                        currentX = secondView.select('.test').attr('x')
+                        secondView.select('.test').attr('x', Math.max(0, Math.min(currentX - deltaX, w - width)))
+                        mouseX = mouseX - deltaX
+                        updateThirdView()
+
+                    }
+
+                })
+                .classed('gene', true)
+
+            drawScale(secondView, 0, chosenCap);
+            updateThirdView()
+
+        }
+
+
+        function updateThirdView() {
+
+            subset.length = 0
+            thirdView.selectAll("text").remove()
+            
+            thirdView.selectAll('.gene').remove()
+
+            thirdView.append("text")
+                .attr("x", split - (split * .65))
+                .attr("y", 20)
+                .attr("text-anchor", "middle")
+                .style("font-size", "16px")
+                .style("fill", "white")
+                .text("Subregion: " + selection)
+
+            thirdView.selectAll('.thirdview').remove()
+
+            var chosenReverseScale, beginningView, endView
+
+            var choice, chosenReverseScale
+
+            chosenData = chooseDataset(selection)
+
+            choice = chosenData[0]
+            chosenReverseScale = chosenData[2]
+
+            let temp = parseInt(secondView.select('.test').attr('x'))
+            let width = parseInt(secondView.select('.test').attr('width'))
+
+            beginningView = chosenReverseScale(temp)
+            endView = chosenReverseScale(temp + width)
+
+            for(i = 0; i < choice.length; i++){
+                if((choice[i].end > beginningView && choice[i].start < endView) || (choice[i].end > endView && choice[i].start < beginningView)){
+                    subset.push(choice[i])
+                    // console.log(beginningView)
+                    // console.log(endView)
+
+                }
+            }
+
+            
+            waste = densityViewInfo(subset, endView, beginningView,density)
+            var densityView = waste[0]
+            max = waste[1]
+
+            // console.log(densityView)
+
+            var colorscale = d3.scaleLinear().domain([0, choice.length/(density**1.5)]).range(["#141414", colour(choice[0].chromosome)])
+            // console.log()
+            thirdView.selectAll(".gene")
+                .data(densityView)
+                .enter()
+                .append("rect")
+                .attr('x', (d,i)=>{
+                    return (w/density) * i
+                    // return 0
+                })
+                .attr('width', function(d){
+                    return w/density
+                })
+                .attr('y',25)
+                .attr('height', 100)
+                .attr('fill', function(d){
+                    return colorscale(d.number)
+                })
+                .classed("gene",true)
+
+
+                // .data(choice)
+                // .enter()
+                // .append("rect")
+                // .attr("x", function (d) {
+                //     if (d.end > beginningView && d.start < endView) {
+                //         return wScale.range([0, w]).domain([beginningView, endView])(d.start)
+                //     }
+                // })
+                // .attr("y", 25)
+                // .attr("width", function (d) {
+                //     distance = d.end - d.start
+                //     if (d.end > beginningView && d.start < endView) {
+                //         subset
+                //             .push(d)
+                //         return wScale.range([0, w]).domain([0, endView - beginningView])(distance)
+                //     }width = parseInt(thirdView.select('.selector').attr('width'))
+
+                // })
+                // .classed('thirdview', true)
+                // .append('title')
+                // .text(function (d) {
+                //     return d.key
+                // })
+
+           thirdView.selectAll('.selector').raise()
+            // TODO Generalize the viewpane
+            thirdView.append('rect')
+                .attr('x', 0)
+                .attr('width', w)
+                .attr('y', 25)
+                .attr('height', 100)
+                .attr('fill', 'yellow')
+                .attr('opacity', 0)
+                .classed('gene', true)
+                .on('mousedown', function () {
+                    width = parseInt(thirdView.select('.selector').attr('width'))
+                    box = parseInt(thirdView.select('.selector').attr('x'))
+                    var clickLocation = d3.pointer(event)[0]
+                    if(clickLocation >= box && clickLocation <= box + width){
+                        dragging = true
+                        thirdView.select('.selector').attr('x', Math.max(0, Math.min(d3.pointer(event)[0] - width/2, w - width)))
+                    }
+                    else{
+                        mouseX = clickLocation
+                        scrolling = true
+                    }
+                    
+            
+                })
+                .on('mouseup', function () {
+                    dragging = false
+                    scrolling = false
+                    // width = parseInt(thirdView.select('.selector').attr('width'))
+                    // thirdView.select('.selector').attr('x', Math.max(0, Math.min(d3.pointer(event)[0] - width, w - width)))
+                    updateFourthView()
+                })
+                .on('mousemove', function () {
+                    if (dragging) {
+                        width = parseInt(thirdView.select('.selector').attr('width'))
+                        thirdView.select('.selector').attr('x', Math.max(0, Math.min(d3.pointer(event)[0] - width/2, w - width)))
+                        updateFourthView()
+                    }
+                    else if(scrolling){
+                        deltaX = (mouseX - d3.pointer(event)[0])/100
+        
+                        currentX = secondView.select('.test').attr('x')
+                        secondView.select('.test').attr('x', Math.max(0, Math.min(currentX - deltaX, w - width)))
+                        mouseX = mouseX - deltaX
+                        updateThirdView()
+                        updateFourthView()
+
+                    }
+                })
+
+            
+           
+            drawScale(thirdView, beginningView, endView)
+            updateFourthView()
+        }
+
+        function updateFourthView() {
+
+
+            fourthView.selectAll("text").remove()
+
+            fourthView.append("text")
+                .attr("x", split - (split * .75))
+                .attr("y", 20)
+                .attr("text-anchor", "middle")
+                .style("font-size", "16px")
+                .style("fill", "white")
+                .text("Genes: " + selection)
+
+            fourthView.selectAll('.fourthView').remove()
+
+            var beginningView, endView, javascriptThings
+
+            javascriptThings = chooseDataset(selection)[2]
+
+            var scales = secondAdaptiveScale(javascriptThings)
+
+            beginningView = scales[0]
+            endView = scales[1]
+            fourthView.selectAll(".fourthView")
+                .data(subset)
+                .enter()
+                .append("rect")
+                .attr("x", function (d) {
+                    if (d.end > beginningView && d.start < endView) {
+                        return wScale.range([0, w]).domain([beginningView, endView])(d.start)
+                    }
+                })
+                .attr("y", 25)
+                .attr("width", function (d) {
+                    distance = d.end - d.start
+                    if (d.end > beginningView && d.start < endView) {
+                        return wScale.range([0, w]).domain([0, endView - beginningView])(distance)
+                    }
+
+                })
+                .attr("height", 100)
+                .attr("fill", function (d) {
+                    return colour(d.chromosome);
+                })
+                .classed('fourthView', true)
+                .append('title')
+                .text(function (d) {
+                    return d.key
+                })
+
+                
+            drawScale(fourthView, beginningView, endView)
+
+        }
+
+       
+
+    </script>
+</body>
+
+</html>
