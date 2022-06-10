@@ -223,11 +223,11 @@ class gene {
         if(mouseX > this.xScale(this.start) && mouseX < this.xScale(this.end)
         && mouseY > this.coordinateY && mouseY < this.coordinateY + 100){
             this.hover = true
-            console.log(true)
+            // console.log(true)
             this.color = color(0, 0, 255, 255)        
             textSize(12)
             if(selectedInfo === undefined){
-                console.log(this.ortholog)
+                // console.log(this.ortholog)
                 let divText = this.key
                 if(this.ortholog){
                     divText += "<br/>Orthologs: " + this.siblings.length 
@@ -272,7 +272,7 @@ class gene {
             // fill(this.color)
         }
         else{
-            console.log("heres one")
+           
 
             let x = xScale(this.start)
             let xx = x + widthScale(size)
@@ -281,13 +281,13 @@ class gene {
 
             let gradient = drawingContext.createLinearGradient(x,y,xx,yy)
             this.ColourList.forEach((c,i)=>{
-                console.log(c)
+  
                 gradient.addColorStop((i/(this.ColourList.length-1).toPrecision(2)), c)
             })
             // gradient.addColorStop(0, color(255, 100, 100, 100))
             // gradient.addColorStop(1, color(150, 100, 100, 100))
             drawingContext.fillStyle = gradient
-            console.log(gradient)
+     
             // background(gradient)
         }
         
@@ -814,7 +814,7 @@ function draw() {
                     }
                     else {
                         if (viewList[z].withinBounds() && viewList[z].getAveraging()) {
-                            console.log(z)
+       
                             let selection = viewList[z].findSelection()
                             let index = chrInfo.findIndex((d) => { return d.chromosome == selection })
                             let newSet = densityViewInfo(chrInfo[index].data, chrInfo[index].cap, 0, bars)
