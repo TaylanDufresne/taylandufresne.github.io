@@ -1012,7 +1012,7 @@ class View {
             let subset = genomeModel.getAlternateChromosomeData(index).data
             let finalSubset = []
             for (let k = 0; k < subset.length; k++) {
-                if ((subset[k].start >= beginning && subset[k].end <= end) || (subset[k].end >= beginning && subset[k].start <= beginning) || (subset[k].beginning <= end && subset[k].end >= end)) {
+                if ((subset[k].start >= beginning && subset[k].end <= end) || (subset[k].end >= beginning && subset[k].start <= beginning) || (subset[k].start <= end && subset[k].end >= end)) {
                     finalSubset.push(subset[k])
                 }
             }
