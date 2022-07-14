@@ -23,6 +23,7 @@ class Controller {
         this.built = false
         this.changed = false
         this.dragging = false
+        this.resizing = false
         this.sliderChange = false
         this.updateOnce = false
         this.liveUpdate = true
@@ -55,6 +56,9 @@ class Controller {
     setDragging(bool) {
         this.dragging = bool
     }
+    setResizing(bool) {
+        this.resizing = bool
+    }
     getSliderChange() {
         return this.sliderChange
     }
@@ -77,7 +81,10 @@ class Model {
     constructor(dataset) {
         this.displayedGenes = []
         this.dataset = dataset
-        this.chromosome = dataset[0].chromosome
+
+        this.chromosome = dataset[Object.keys(dataset)[0]]
+
+
         this.densityData = []
         this.chromosomeNameList = []
         this.viewList = []
@@ -89,20 +96,22 @@ class Model {
 
         // Scaffold information not comparable and clutters everything up
         let ignore = "Scaffold"
-        this.dataset.forEach((item) => {
-            if (!this.chromosomeNameList.some((x) => x.chromosome == item.chromosome) && !item.chromosome.includes(ignore)) {
+        for (let item in this.dataset) {
+            // this.dataset.forEach((item) => {
+            if (!this.chromosomeNameList.some((x) => x.chromosome == this.dataset[item].chromosome) && !this.dataset[item].chromosome.includes(ignore)) {
 
-                var check = item.key.toLowerCase()
+                var check = item
 
                 var temp = {
-                    chromosome: item.chromosome,
+                    chromosome: this.dataset[item].chromosome,
                     designation: check.slice(0, check.indexOf('g'))
                 }
                 // Building a list of the chromosome names, used for later finding information on that dataset
                 this.chromosomeNameList.push(temp)
             }
-        })
-
+        }
+        // )
+ 
         // Changing the default lexicographical order, since chromosome11 should come after chromosome2 
         // additional logic so that all chromosomes from the same line should be grouped   
         this.chromosomeNameList.sort((a, b) => {
@@ -117,9 +126,13 @@ class Model {
         // Building an array of useful data/functions for each chromosome
         this.chromosomalData = []
         this.chromosomeNameList.forEach((chr) => {
-            var subset = dataset.filter((d) => {
-                return d.chromosome == chr.chromosome
-            })
+            var subset = Object.entries(this.dataset).filter(d=> {
+                return d[1].chromosome == chr.chromosome
+            }).map(x=> x[1])
+            
+            // var subset = dataset.filter((d) => {
+            //     return d.chromosome == chr.chromosome
+            // })
 
             var cap = Math.max.apply(Math, subset.map((d) => {
                 return d.end
@@ -145,7 +158,7 @@ class Model {
 
         // Scales for finding the locations of things
         this.overviewScale = d3.scaleLinear().domain([0, max]).range([0, w])
-        this.reverseOverviewScale = d3.scaleLinear().domain([0, w]).range([0, this.dataset.length])
+        this.reverseOverviewScale = d3.scaleLinear().domain([0, w]).range([0, Object.keys(this.dataset).length])
 
         for (var i = 0; i < this.chromosomalData.length; i++) {
             if (i == 0) {
@@ -179,15 +192,21 @@ class Model {
     }
     setOrthologs(pairs) {
         this.orthologs = pairs
+        pairs.forEach((x => {
+            let sourceIndex = x.source.toLowerCase()
+            let targetIndex = x.target.toLowerCase()
+            this.dataset[sourceIndex].ortholog = true
+            this.dataset[targetIndex].ortholog = true
+            this.dataset[sourceIndex].siblings.push(x.target)
+            this.dataset[targetIndex].siblings.push(x.source)
+        }))
     }
     getOrthologs() {
         return this.orthologs
     }
-
     getSelectedChromosome() {
         return this.chromosome
     }
-
     getSelectedChromosomeData() {
         return this.chromosomalData[this.index]
     }
@@ -203,7 +222,6 @@ class Model {
     getSelectedSubsetData() {
         return this.subset
     }
-
     changeChromosome(chr) {
         this.chromosome = chr
     }
@@ -213,17 +231,14 @@ class Model {
     setSelectedGene(gene) {
         this.selectedGene = gene
     }
-
     getChromosomeIndex(chromosome) {
         return this.chromosomeNameList.findIndex(x => {
             return x.chromosome == chromosome
         })
     }
-
     getNumberOfChromosomes() {
         return this.chromosomalData.length
     }
-
     getViewList() {
         return this.viewList
     }
@@ -241,20 +256,12 @@ class Model {
             subscriber.update()
         })
     }
-
     updateSingleView(index) {
         this.viewList[index].update()
     }
-
     searchForGene(query) {
-        query = query.toLowerCase()
-        var index = this.dataset.findIndex((x, y) => {
-            if (x.key == query) {
-                return true
-            }
-        })
-        if (index > 0) {
-
+        let index = query.toLowerCase()
+        if (this.dataset[index] != undefined) {
             var queryInfo = this.dataset[index]
             var queryChromosomalData = this.chromosomalData[this.chromosomalData.findIndex((d) => { return d.key.chromosome == queryInfo.chromosome })]
             var querySubset = queryChromosomalData.data
@@ -273,7 +280,7 @@ class Model {
                 chromosomeData: querySubset,
                 index: subsetIndex,
                 key: query,
-                start: dataset[index].start
+                start: this.dataset[index].start
             }
             return geneLocation
         }
@@ -293,7 +300,7 @@ class Model {
         this.viewList[1 + modifier].updateDataset(searchView.getBars(), searchView.getMax())
 
         let searchScale = d3.scaleLinear().domain([0, geneLocation.cap]).range([0, w])
-        
+
         this.viewList[1 + modifier].updateSelector(searchScale(geneLocation.start))
 
         let subset = this.viewList[1 + modifier].getSelectorSubset()
@@ -343,25 +350,32 @@ function pullInfo(genomeFile) {
     return d3.text(genomeFile)
         .then(function (data) {
             temporary = data.split(/\n/)
-            dataset = []
+            // dataset = []
             savedDensityData = []
-            dataset = temporary.map(function (d) {
+
+            let dataset = {}
+            temporary.forEach(d=>{
                 info = d.split('\t')
+                // console.log(info)
                 if (info.length > 1) {
-                    var template = {
+                    let key = info[1].toLowerCase()
+                    var stats = {
                         chromosome: info[0],
                         start: info[2],
                         end: info[3],
-                        key: info[1].toLowerCase()
+                        key: key,
+                        ortholog: false,
+                        siblings: [],
                     }
-                    return template
-                }
-            });
-            // Removing the last empty entry
-            trash = dataset.pop()
+                    // console.log(stats)
+                    // console.log(key)
+                   dataset[key] = stats
+            }
+        })
             return dataset
         })
-}
+    }
+           
 
 // Used for drawing areas containing a number of genes vs each individual gene
 class densityViewData {
@@ -383,24 +397,21 @@ class densityViewData {
 
 class gene {
 
-    constructor(start, end, chromosome, key, height) {
-        this.start = start;
-        this.end = end;
-        this.chromosome = chromosome;
-        this.key = key;
+    constructor(geneInfo, height) {
+        // constructor(start, end, chromosome, key, height) {
+        this.start = geneInfo.start;
+        this.end = geneInfo.end;
+        this.chromosome = geneInfo.chromosome;
+        this.key = geneInfo.key;
         this.hover = false;
-        this.ortholog = false;
+        this.ortholog = geneInfo.ortholog;
         this.height = height
-        this.siblings;
+        this.siblings = geneInfo.siblings;
 
         let c, selectedHue
         let location = genomeModel.getChromosomeIndex(this.chromosome)
 
         selectedHue = (255 / genomeModel.getNumberOfChromosomes()) * (location)
-
-        if (genomeModel.getOrthologs() != undefined) {
-            this.siblings = genomeModel.getOrthologs().filter(e => e.source.toLowerCase() === key || e.target.toLowerCase() === key)
-        }
 
         // Using an array to track the respective colours of orthologous genes
         this.ColourList = []
@@ -411,26 +422,17 @@ class gene {
             this.siblings.forEach(sibling => {
 
                 let siblingSource;
-                let siblingTarget;
 
-                var sourceCheck = sibling.source.toLowerCase()
-                var targetCheck = sibling.target.toLowerCase()
+                var sourceCheck = sibling.toLowerCase()
+
 
                 var sourceDesignation = sourceCheck.slice(0, sourceCheck.indexOf('g'))
-                var targetDesignation = targetCheck.slice(0, targetCheck.indexOf('g'))
 
                 siblingSource = genomeModel.chromosomeNameList.findIndex((d) => {
                     return d.designation == sourceDesignation
                 })
-                siblingTarget = genomeModel.chromosomeNameList.findIndex((d) => {
-                    return d.designation == targetDesignation
-                })
 
                 let siblingLocation = siblingSource
-
-                if (siblingSource == location) {
-                    siblingLocation = siblingTarget
-                }
 
                 if (siblingLocation == location) {
                     selectedHue += 10
@@ -477,12 +479,8 @@ class gene {
                 if (this.ortholog) {
                     divText += "<br/>Orthologs: " + this.siblings.length
                     this.siblings.forEach(item => {
-                        if (item.source.toLowerCase() === this.key) {
-                            divText += "<br/>" + item.target
-                        }
-                        else {
-                            divText += "<br/>" + item.source
-                        }
+
+                        divText += "<br/>" + item
                     })
                 }
                 selectedInfo = createDiv(divText)
@@ -564,7 +562,7 @@ class gene {
         if (selected != undefined) {
             var isOrtholog = false
             if (selected.getOrthologs() != undefined && selected.getOrthologs().length > 0) {
-                isOrtholog = selected.getOrthologs().some(x => x.source.toLowerCase() == this.key || x.target.toLowerCase() == this.key)
+                isOrtholog = selected.getOrthologs().some(x => x.toLowerCase() == this.key)
             }
             // Highlight white if an orthologous gene is selected as well
             if (selected.key == this.key || isOrtholog || this.hover) {
@@ -591,52 +589,6 @@ class gene {
     }
 }
 
-// TODO - in progress, OverView class as a container class for Views - use to separate multiple chromosomes when there
-// are too many
-class OverView {
-
-    constructor(coordinateY, chosenDataset, max, chromosome, height) {
-        this.coordinateY = coordinateY
-        this.height = height
-        this.chosenDataset = chosenDataset
-        this.viewListData = []
-        this.viewList = []
-
-        
-        let length = genomeModel.chromosomeNameList.length
-        let viewInfo = []
-        for (i = 0; i < length - 1; i += 10) {
-            let subset = genomeModel.chromosomeNameList.slice(i, i + 10)
-            viewInfo.push(subset)
-        }
-        this.viewInfo = viewInfo
-
-        viewInfo.forEach(x => {
-            let tempList = []
-            x.forEach(v => {
-                let temp = this.chosenDataset.filter(e => {
-                    return v.chromosome == e.chromosome
-                })
-
-                tempList.push(...temp)
-            })
-            this.viewListData.push(tempList)
-        })
-
-        this.viewListData.forEach(v => {
-            let placeholder = new View(this.coordinateY, v, max, chromosome, height)
-            placeholder.removeScale()
-            genomeModel.addToViewList(placeholder)
-            this.viewList.push(placeholder)
-        })
-    }
-    update() {
-        this.viewList.forEach(x => {
-            x.update()
-        })
-    }
-
-}
 
 class View {
 
@@ -646,6 +598,7 @@ class View {
         this.selector = false
         // Can be in the controller
         this.dragging = false
+        this.resizing = false
         this.max = max
         this.chromosome = chromosome
         this.subscribers;
@@ -655,7 +608,9 @@ class View {
         this.borderList = []
 
         this.beginning = chosenDataset[0].start
-        this.end = chosenDataset[chosenDataset.length - 1].end
+        this.end = Math.max.apply(Math, chosenDataset.map((d) => {
+            return d.end
+        }))
         this.selectable = false
         this.width = w
         this.coordinateX = 0
@@ -683,9 +638,20 @@ class View {
         this.subscribers.passBounds(selection.start, selection.end)
 
         if (this.subscribers.getAveraging()) {
-            
             var newDensity = densityViewInfo(selection.dataset, selection.end, selection.start, bars)
-            this.subscribers.updateDataset(newDensity.getBars(), newDensity.getMax())
+            if(newDensity != -1){
+                this.subscribers.updateDataset(newDensity.getBars(), newDensity.getMax())
+            }
+            else{
+                let hackyFix = {
+                    start: selection.start,
+                    end: selection.end,
+                    number: 0,
+                    chromosome: this.chromosome
+                }
+                this.subscribers.updateDataset([hackyFix], 100)
+            }
+            
         }
         else {
 
@@ -716,15 +682,8 @@ class View {
             if (!this.selector && selected != undefined && selected.hasOrthologs()) {
 
                 genomeModel.selectedGene.getOrthologs().forEach(x => {
-                    let source = genomeModel.searchForGene(x.source)
-                    let target = genomeModel.searchForGene(x.target)
-
-                    if (x.source.toLowerCase() == genomeModel.getSelectedGene().key) {
-                        orthologs.push(target)
-                    }
-                    else {
-                        orthologs.push(source)
-                    }
+                    let target = genomeModel.searchForGene(x)
+                    orthologs.push(target)
                 })
             }
 
@@ -740,14 +699,14 @@ class View {
                         startOfChromosome = locationScale(i)
                     }
                     if ((d.chromosome != currentChromosome && tracking) || (tracking && i == this.chosenDataset.length - 1)) {
-                        
+
                         tracking = false
                         endOfChromosome = locationScale(i + 1)
 
                         this.makeBorder(startOfChromosome, endOfChromosome, currentChromosome)
                         currentChromosome = d.chromosome
                         startOfChromosome = locationScale(i)
-                    
+
                         this.highlightBorder()
                     }
 
@@ -791,7 +750,7 @@ class View {
             let widthScale = d3.scaleLinear().range([0, this.width]).domain([0, this.end - this.beginning])
 
             this.chosenDataset.forEach((d) => {
-                let drawGene = new gene(d.start, d.end, d.chromosome, d.key, this.height)
+                let drawGene = new gene(d, this.height)
 
                 drawGene.create(this.coordinateY, xScale, widthScale)
 
@@ -898,7 +857,7 @@ class View {
         }
         else {
             start = 0
-            end = this.chosenDataset[this.chosenDataset.length - 1].end
+            end = this.end
         }
 
         let locationY = this.coordinateY + this.height + 7
@@ -911,7 +870,7 @@ class View {
         for (i = 0; i <= (this.width - 3); i += increments) {
             rect(i + this.coordinateX, locationY, 3, 9)
             let value = (typeof this.beginning === 'undefined') ? 0 : +this.beginning
-            
+
             // TODO - Certain window sizes change the location of the scale, fix
             if (i == 0) {
                 text(Math.round(value + i * difference), i + 5 + this.coordinateX, locationY + 20)
@@ -943,7 +902,13 @@ class View {
 
         if (this.selectorBox != undefined) {
             // Move it here
-            this.selectorBox.position(this.selectorX, this.coordinateY)
+            if (this.dragging) {
+                this.selectorBox.position(this.selectorX, this.coordinateY)
+            }
+            else if (this.resizing) {
+                this.selectorBox.style('width', this.selectorWidth + 'px')
+                this.selectorBox.style('height', this.height + 'px')
+            }
         }
         else {
             // Make a new selector box
@@ -953,6 +918,15 @@ class View {
             newSelector.class("border border-light")
             newSelector.mouseOver(() => {
                 newSelector.class("border border-primary bg-light opacity-25")
+
+            })
+            newSelector.mouseMoved(() => {
+                if (mouseX < this.selectorX + 3 || mouseX > this.selectorX + this.selectorWidth - 3) {
+                    newSelector.style('cursor: w-resize')
+                }
+                else {
+                    newSelector.style('cursor: pointer')
+                }
             })
             newSelector.mouseOut(() => {
                 if (!this.dragging) {
@@ -960,10 +934,24 @@ class View {
                 }
             })
             newSelector.mousePressed(() => {
-                this.dragging = true
+                if (this.hit()) {
+                    if (mouseX < this.selectorX + 3 || mouseX > this.selectorX + this.selectorWidth - 3) {
+                        if (mouseX < this.selectorX + 3) {
+                            this.west = true
+                        }
+                        else {
+                            this.west = false
+                        }
+                        this.resizing = true
+                    }
+                    else {
+                        this.dragging = true
+                    }
+                }
             })
             newSelector.mouseReleased(() => {
                 this.dragging = false
+                this.resizing = false
             })
             newSelector.position(this.selectorX, this.coordinateY)
 
@@ -977,8 +965,36 @@ class View {
 
     updateSelector(coordinateX) {
 
-        this.selectorX = Math.min(Math.max(0, coordinateX - this.selectorWidth / 2), (this.width - this.selectorWidth))
-        this.selectorBox.position(this.selectorX, this.coordinateY)
+        if (!this.resizing) {
+            this.selectorX = Math.min(Math.max(0, coordinateX - this.selectorWidth / 2), (this.width - this.selectorWidth))
+            this.selectorBox.position(this.selectorX, this.coordinateY)
+        }
+        else {
+            let delta;
+            if (this.west) {
+                delta = coordinateX - this.selectorX
+                if ((this.selectorWidth + delta < 15) || coordinateX > this.selectorX + this.selectorWidth) {
+
+                }
+                else {
+                    this.selectorX += delta
+                    this.selectorWidth -= delta
+                }
+
+            }
+            else {
+                delta = coordinateX - (this.selectorX + this.selectorWidth)
+                if ((this.selectorWidth + delta < 15) || coordinateX < this.selectorX) {
+                }
+                else {
+                    this.selectorWidth += delta
+                }
+
+            }
+
+            this.selectorBox.position(this.selectorX, this.coordinateY)
+        }
+        this.refreshSelector()
     }
 
     setDragging(bool) {
@@ -987,6 +1003,9 @@ class View {
     dragged() {
         return this.dragging
     }
+    resized() {
+        return this.resizing
+    }
     checkSelector() {
         return this.selector
     }
@@ -994,8 +1013,13 @@ class View {
         if (newInfo[0] !== undefined) {
             this.chromosome = newInfo[0].chromosome
         }
+
         this.chosenDataset = newInfo
         this.max = max
+        // This is a problem
+        // this.end = Math.max.apply(Math, newInfo.map((d) => {
+        //     return d.end
+        // }))
     }
     withinBounds() {
         return mouseY > this.coordinateY && mouseY < this.coordinateY + this.height && mouseX > this.coordinateX && mouseX < this.width + this.coordinateX
@@ -1003,9 +1027,10 @@ class View {
 
     getSelectorSubset() {
         // TODO this is likely in the wrong class for this functionality
-        let selectorScale = d3.scaleLinear().range([this.chosenDataset[0].start, this.chosenDataset[this.chosenDataset.length - 1].end]).domain([0, w])
+        
+        let selectorScale = d3.scaleLinear().range([this.beginning, this.end]).domain([0, w])
         if (this.selector) {
-            let chr = this.chosenDataset[0].chromosome
+            let chr = this.chromosome
             let index = genomeModel.getChromosomeIndex(chr)
             let beginning = selectorScale(this.selectorX)
             let end = selectorScale(this.selectorX + this.selectorWidth)
@@ -1125,7 +1150,7 @@ function display(text) {
     if (selectedInfo === undefined) {
 
         selectedInfo = createDiv(text)
- 
+
         selectedInfo.position(mouseX, mouseY + 20)
         selectedInfo.class("alert alert-dark")
 
@@ -1148,11 +1173,20 @@ function mouseReleased() {
     third.setDragging(false)
     if (!controller.liveUpdate) {
         controller.updateOnce = true
-
+        genomeModel.clearDisplayedGenes()
     }
 
     controller.changed = false
     controller.setDragging(false)
+    controller.setResizing(false)
+
+    // Hacky fix
+    viewList.forEach(v => {
+        if (v.checkSelector()) {
+            v.dragging = false
+            v.resizing = false
+        }
+    })
 }
 
 function mousePressed() {
@@ -1189,12 +1223,15 @@ function changeGenome() {
     }
 
     // TODO hacky fix for removing overview borders
-    first.borderList.forEach(d => d.border.remove())
+    let numberOfBordersToRemove = totalViews - 4
+    for (i = 0; i <= numberOfBordersToRemove; i++) {
+        viewList[i].borderList.forEach(d => d.border.remove())
+    }
 
     genomeModel.clearDisplayedGenes()
     pullInfo(chosenGenomeFile).then(dataset => {
         genomeModel = new Model(dataset)
-        if (dataset.length > 50000) {
+        if (dataset.length > 900000) {
             controller.liveUpdate = false
         }
     }).then(() => {
@@ -1226,12 +1263,12 @@ function densityViewInfo(dataset, cap, start, density) {
         }
 
         var max = 0;
-    
-        densityView.forEach(x=>{
-            x.number =  dataset.filter(e=> e.end >= x.start && e.start <= x.end).length
+
+        densityView.forEach(x => {
+            x.number = dataset.filter(e => e.end >= x.start && e.start <= x.end).length
             max = Math.max(max, x.number)
         })
-       
+
         result = new densityViewData(densityView, max, dataset[0].chromosome)
     }
     else {
@@ -1264,7 +1301,6 @@ function chosenTriangle(centerX, coordinateY) {
 
 function searchButtonClicked() {
     let query = document.getElementById('search').value
-    console.log(query)
     if (query != undefined && query != '') {
         let found = genomeModel.searchForGene(query)
         if (found != -1) {
@@ -1279,7 +1315,6 @@ function searchButtonClicked() {
     else {
         window.alert('Please enter a gene.')
     }
-
 }
 
 function searchForGene(query) {
@@ -1296,7 +1331,6 @@ function removeDisplay() {
         selectedInfo.remove()
     }
 }
-
 
 function removeExtraViews() {
 
@@ -1324,7 +1358,6 @@ pullGeneInfo(chosenCollinearityFile, ['at']).then(pairs => {
 
 controller = new Controller()
 controller.setModel(genomeModel)
-
 
 function setup() {
     w = $(document).width() - 30;
@@ -1382,19 +1415,18 @@ function draw() {
     fill(255, 0, 0)
     bars = w / density_slider.value()
 
-    // This
     let overViewCheck = false
     if (overViewList != undefined) {
         let x = overViewList.length
-        for(i = 0; i < x; i++){
-             if(viewList[i].withinBounds()){
+        for (i = 0; i < x; i++) {
+            if (viewList[i].withinBounds()) {
                 viewList[i].showChromosome()
                 controller.showingInfo = true
                 overViewCheck = true
             }
         }
     }
-    if (! overViewCheck && controller.showingInfo) {
+    if (!overViewCheck && controller.showingInfo) {
         removeDisplay()
         controller.showingInfo = false
     }
@@ -1420,34 +1452,34 @@ function draw() {
             overViewList = []
             let temporaryList = []
             let tempCount = 0
-            while(tempCount < genomeModel.getNumberOfChromosomes()){
-                if(temporaryList.length == 20){
+            while (tempCount < genomeModel.getNumberOfChromosomes()) {
+                if (temporaryList.length == 20) {
                     overViewList.push(temporaryList)
                     temporaryList = []
                 }
-                else{
+                else {
                     temporaryList.push(genomeModel.getAlternateChromosomeData(tempCount))
                     tempCount++
                 }
-               
+
             }
-            if(temporaryList.length > 0){
+            if (temporaryList.length > 0) {
                 overViewList.push(temporaryList)
                 temporaryList = []
             }
 
             let number = 0
-            let overViewHeight = 100/overViewList.length
-            overViewList.forEach(k=>{
+            let overViewHeight = 100 / overViewList.length
+            overViewList.forEach(k => {
                 boxList = []
                 for (x = 0; x < k.length; x++) {
 
                     let selectedChromosome = k[x]
                     numberOfBars = geneDensityScale(selectedChromosome.cap)
-    
+
                     building = densityViewInfo(selectedChromosome.data, selectedChromosome.cap, 0, numberOfBars)
                     let densityData = densityViewInfo(selectedChromosome.data, selectedChromosome.cap, 0, w / 15)
-    
+
                     if (building.getMax() > max) {
                         max = building.getMax()
                     }
@@ -1455,13 +1487,13 @@ function draw() {
                     genomeModel.appendStoredDensityData(densityData)
                 }
 
-                first = new View(150 + (overViewHeight + 10)* number , boxList, max, 'at', overViewHeight)
-                number ++
+                first = new View(150 + (overViewHeight + 10) * number, boxList, max, 'at', overViewHeight)
+                number++
                 first.removeScale()
                 viewList.push(first)
             })
-            
-  
+
+
             let selectedChromosome = genomeModel.getAlternateChromosomeData(0)
             let beginning = densityViewInfo(selectedChromosome.data, selectedChromosome.cap, 0, bars)
 
@@ -1470,25 +1502,22 @@ function draw() {
 
             // need some logic around selector
             let secondSubset = second.getSelectorSubset()
-            let here = genomeModel.getChromosomeIndex(secondSubset.dataset[0].chromosome)
-            // let here = chrInfo.findIndex((d) => { return d.chromosome == oop.dataset[0].chromosome })
+            let chosenIndex = genomeModel.getChromosomeIndex(secondSubset.dataset[0].chromosome)
 
-            let testing = densityViewInfo(genomeModel.getAlternateChromosomeData(here).data, secondSubset.end, secondSubset.start, bars)
+            let thirdDensity = densityViewInfo(genomeModel.getAlternateChromosomeData(chosenIndex).data, secondSubset.end, secondSubset.start, bars)
 
-            third = new View(450, testing.getBars(), testing.getMax(), testing.getChromosome(), 100)
+            third = new View(450, thirdDensity.getBars(), thirdDensity.getMax(), thirdDensity.getChromosome(), 100)
             third.addSelector(20, 20)
-            // third.noAverage()
 
             second.addSubscriber(third)
             let thirdSubset = third.getSelectorSubset()
 
-
-            let testingAgain = densityViewInfo(thirdSubset.dataset, thirdSubset.end, thirdSubset.start, bars)
-            if (testingAgain != -1) {
-                fourth = new View(600, testingAgain.getBars(), testingAgain.getMax(), testingAgain.getChromosome(), 100)
+            let fourthDensity = densityViewInfo(thirdSubset.dataset, thirdSubset.end, thirdSubset.start, bars)
+            if (fourthDensity != -1) {
+                fourth = new View(600, fourthDensity.getBars(), fourthDensity.getMax(), fourthDensity.getChromosome(), 100)
             }
             else {
-                fourth = new View(600, testing.getBars(), testing.getMax(), testing.getChromosome(), 100)
+                fourth = new View(600, thirdDensity.getBars(), thirdDensity.getMax(), thirdDensity.getChromosome(), 100)
 
             }
             fourth.noAverage()
@@ -1506,26 +1535,22 @@ function draw() {
             totalViews = viewList.length
         }
 
-
         if (mouseIsPressed && !controller.liveUpdate) {
             viewList.forEach((z) => {
                 if (z.checkSelector) {
-                    if (z.hit() || z.dragged()) {
+                    if (z.hit() || z.dragged() || z.resized()) {
                         z.updateSelector(mouseX)
-                        // z.setDragging(true)
-                        // controller.setDragging(true)
                     }
                 }
             })
-            // viewList.forEach((x)=>x.refreshSelector())
         }
 
         else if (controller.changed || controller.getDragging() || controller.getUpdateOnce()) {
             controller.setUpdateOnce(false)
             if (built) {
+
                 // Need logic around a changed selection, otherwise repeatedly adding and drawing new view
                 // List of genes is being updated with selecting orthologs
-
                 genomeModel.getDisplayedGenes().forEach(x => {
                     if (x.clicked()) {
                         resetViews()
@@ -1542,38 +1567,19 @@ function draw() {
                 if (selected != undefined && selected.hasOrthologs()) {
 
                     removeExtraViews()
+
+                    // Creating mini-views for the orthologous genes
                     selected.getOrthologs().forEach((z, i) => {
-                        //generalize search for this
-
-                        // Need search function to find location, then use the size of the selectors to create subset for
-                        // this view
-                        // use scale to change constant selector size to 'gene'-size, exlude, do again for next layer?
-
-
-                        let goal;
-                        if (z.source.toLowerCase() == selected.key) {
-                            goal = z.target
-                        }
-                        else {
-                            goal = z.source.toLowerCase()
-                        }
-
-                        // TODO align genes amongst the views
-                        // TODO button to clear selection
+                        let goal = z
                         let searchInformation = searchForGene(goal)
                         let contextInformation = searchInformation.chromosomeData
-                        // let index = chrInfo.findIndex((d) => {
-                        //     return d.chromosome == searchInformation.chromosome
-                        // })
                         let index = genomeModel.getChromosomeIndex(searchInformation.chromosome)
-                        // let endOfRange = chrInfo[index].cap
                         let endOfRange = genomeModel.getAlternateChromosomeData(index).cap
                         let comparisonViewScale = d3.scaleLinear().domain([0, w]).range([0, endOfRange])
                         let firstCompression = comparisonViewScale(100)
                         let startLocation = contextInformation[contextInformation.findIndex(d => {
                             return d.key == goal.toLowerCase()
                         })].start
-
 
                         let beginningFilter = +startLocation - firstCompression / 2
                         let endFilter = +startLocation + firstCompression / 2
@@ -1583,7 +1589,6 @@ function draw() {
                             return x.start > beginningFilter && x.end < endFilter
                         })
 
-                        // Getting all fucky due to gene locations, should be independent of subset
                         let secondCompression = comparisonViewScale.range([0, firstCompression])(20)
                         secbeginningFilter = +startLocation - secondCompression
                         secendFilter = +startLocation + secondCompression
@@ -1591,26 +1596,14 @@ function draw() {
                             return x.start > secbeginningFilter && x.end < secendFilter
                         })
 
-                        // TODO cache this information, should not have to recalculate everytime
                         let orthologView = new View(750 + (200 * Math.floor(i / 2)), secondSubset, 100, searchInformation.chromosome, 100)
                         orthologView.noAverage()
                         orthologView.makeSelectable()
 
-                        // Honestly... do this for all chromosomes immediately. Then call the information later with a 
-                        // switch statement
-
-                        // Add this to a list, don't need to calculate it every time.
-                        // Something similar is likely leading to the lag outside of the highlight orthologs setting
-                        // let densityData = densityViewInfo(contextInformation, searchInformation.cap, 0, w/15)
-
                         let savedDensityData = genomeModel.getStoredDensityData(index)
 
                         let navigationOrthologView = new View((750 + (200 * Math.floor(i / 2)) + 130), savedDensityData.getBars(), savedDensityData.getMax(), savedDensityData.getChromosome(), 25)
-                        // navigationOrthologView.addSubscriber(orthologView)
-                        // if(highlightOrthologs){
-                        //     navigationOrthologView.noAverage()
-                        // }
-                        // savedData.push(densityData)
+
                         let locationScale = d3.scaleLinear().domain([0, endOfRange]);
                         if (i % 2 == 1) {
                             orthologView.setAlternateWidth(w / 2, w / 2)
@@ -1621,15 +1614,12 @@ function draw() {
                         else {
                             if (i == selected.getOrthologs().length - 1) {
                                 locationScale.range([0, w])
-                                console.log('Should be in the right place')
                             }
                             else {
                                 orthologView.setAlternateWidth(w / 2, 0)
                                 navigationOrthologView.setAlternateWidth(w / 2, 0)
                                 locationScale.range([0, w / 2])
                             }
-
-                            
                         }
                         navigationOrthologView.addSelector(locationScale(startLocation) - 5, 10)
                         navigationOrthologView.extraHighlight()
@@ -1671,7 +1661,7 @@ function draw() {
                 // Hacky loop instead of subscribers atm
 
                 if (sliderChange()) {
-                    // let choice = chromosomeNameList.findIndex((x) => { return x == second.getChromosome() })
+
                     genomeModel.clearDisplayedGenes()
                     let choice = genomeModel.getChromosomeIndex(second.getChromosome())
 
@@ -1682,11 +1672,8 @@ function draw() {
                     let thisCouldBeBetter = densityViewInfo(information.data, information.cap, information.start, bars)
                     second.updateDataset(thisCouldBeBetter.getBars(), thisCouldBeBetter.getMax())
                     second.updateSubscribers()
-                    // sliderChange = false
-
                 }
                 if (genomeModel.getHighlightOrthologs()) {
-
                     third.noAverage()
                     density_slider.value(1)
                 }
@@ -1694,19 +1681,13 @@ function draw() {
                     third.pleaseAverage()
                 }
 
-                // this
                 for (z = 0; z < viewList.length; z++) {
 
                     if (viewList[z].checkSelector()) {
 
-                        if (viewList[z].hit() || viewList[z].dragged()) {
+                        if (viewList[z].hit() || viewList[z].dragged() || viewList[z].resized()) {
                             genomeModel.clearDisplayedGenes()
                             viewList[z].updateSelector(mouseX)
-                            if (controller.liveUpdate) {
-                                viewList[z].setDragging(true)
-                            }
-
-                            // controller.setDragging(true)
                             altered = true
                         }
                     }
@@ -1720,29 +1701,22 @@ function draw() {
                             genomeModel.clearDisplayedGenes()
                             selected = undefined
                             let selection = viewList[z].findSelection()
-                            // let index = chrInfo.findIndex((d) => { return d.chromosome == selection })
                             genomeModel.changeChromosome(selection)
                             let index = genomeModel.getChromosomeIndex(selection)
                             let newSet = densityViewInfo(genomeModel.getAlternateChromosomeData(index).data, genomeModel.getAlternateChromosomeData(index).cap, 0, bars)
                             let c = 0
-                            while(!viewList[z + c].checkSelector()){
+                            while (!viewList[z + c].checkSelector()) {
                                 c++
                             }
                             viewList[z + c].updateDataset(newSet.getBars(), newSet.getMax())
                             altered = true
                         }
                     }
-        
                     viewList[z].update()
                 }
-              
-
-
             }
 
             subtitle.html("Chosen Chromosome: " + genomeModel.getChromosomeName())
         }
-
-
     }
 }
