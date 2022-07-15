@@ -164,6 +164,7 @@ class Model {
             if (i == 0) {
                 this.chromosomalData[i].start = 0
                 this.chromosomalData[i].end = this.overviewScale(this.chromosomalData[i].cap)
+                debugger
             }
             else {
                 this.chromosomalData[i].start = this.chromosomalData[i - 1].end
@@ -1017,9 +1018,9 @@ class View {
         this.chosenDataset = newInfo
         this.max = max
         // This is a problem
-        // this.end = Math.max.apply(Math, newInfo.map((d) => {
-        //     return d.end
-        // }))
+        this.end = Math.max.apply(Math, newInfo.map((d) => {
+            return d.end
+        }))
     }
     withinBounds() {
         return mouseY > this.coordinateY && mouseY < this.coordinateY + this.height && mouseX > this.coordinateX && mouseX < this.width + this.coordinateX
