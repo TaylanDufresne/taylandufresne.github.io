@@ -1608,9 +1608,9 @@ function draw() {
 
                         let locationScale = d3.scaleLinear().domain([0, endOfRange]);
                         if (i % 2 == 1) {
-                            orthologView.setAlternateWidth(w / 2, w / 2)
-                            navigationOrthologView.setAlternateWidth(w / 2, w / 2)
-                            locationScale.range([w / 2, w])
+                            orthologView.setAlternateWidth((w / 2) -10 , (w / 2) - 5)
+                            navigationOrthologView.setAlternateWidth((w / 2) -10 , (w / 2) - 5)
+                            locationScale.range([(w / 2)-5, w])
 
                         }
                         else {
@@ -1618,9 +1618,9 @@ function draw() {
                                 locationScale.range([0, w])
                             }
                             else {
-                                orthologView.setAlternateWidth(w / 2, 0)
-                                navigationOrthologView.setAlternateWidth(w / 2, 0)
-                                locationScale.range([0, w / 2])
+                                orthologView.setAlternateWidth((w / 2) - 10, 0)
+                                navigationOrthologView.setAlternateWidth((w / 2)-10, 0)
+                                locationScale.range([0, (w / 2)-5])
                             }
                         }
                         navigationOrthologView.addSelector(locationScale(startLocation) - 5, 10)
