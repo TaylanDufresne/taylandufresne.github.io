@@ -13,6 +13,7 @@ let first, second, third, fourth;
 let overview;
 let totalViews = 4
 let overViewList
+let constantHeight = 75;
 
 class Controller {
 
@@ -164,7 +165,6 @@ class Model {
             if (i == 0) {
                 this.chromosomalData[i].start = 0
                 this.chromosomalData[i].end = this.overviewScale(this.chromosomalData[i].cap)
-                debugger
             }
             else {
                 this.chromosomalData[i].start = this.chromosomalData[i - 1].end
@@ -298,7 +298,7 @@ class Model {
         this.clearDisplayedGenes()
 
         var searchView = densityViewInfo(geneLocation.chromosomeData, geneLocation.cap, 0, bars)
-        this.viewList[1 + modifier].updateDataset(searchView.getBars(), searchView.getMax())
+        this.viewList[1 + modifier].updateDataset(searchView.getBars(), searchView.getMax(),geneLocation.cap)
 
         let searchScale = d3.scaleLinear().domain([0, geneLocation.cap]).range([0, w])
 
@@ -468,7 +468,7 @@ class gene {
 
     hovering() {
         if (mouseX > this.xScale(this.start) && mouseX < this.xScale(this.end)
-            && mouseY > this.coordinateY && mouseY < this.coordinateY + 100) {
+            && mouseY > this.coordinateY && mouseY < this.coordinateY + constantHeight) {
 
             this.hover = true
 
@@ -509,7 +509,7 @@ class gene {
 
     clicked() {
         return (mouseX > this.xScale(this.start) && mouseX < this.xScale(this.end)
-            && mouseY > this.coordinateY && mouseY < this.coordinateY + 100)
+            && mouseY > this.coordinateY && mouseY < this.coordinateY + constantHeight)
     }
 
     // TODO Passing xScale repeatedly this way is realllly not ideal, find an alternative
@@ -533,7 +533,7 @@ class gene {
             // let x = xScale(this.start)
             // let xx = x + widthScale(size)
             // let y = this.coordinateY
-            // let yy = y + 100
+            // let yy = y + constantHeight
             // let gradient = drawingContext.createLinearGradient(x, y, xx, yy)
             // this.ColourList.forEach((c, i) => {
 
@@ -609,7 +609,7 @@ class View {
         this.borderList = []
 
         this.beginning = chosenDataset[0].start
-        this.end = Math.max.apply(Math, chosenDataset.map((d) => {
+        this.end = Math.max(...chosenDataset.map((d) => {
             return d.end
         }))
         this.selectable = false
@@ -641,7 +641,7 @@ class View {
         if (this.subscribers.getAveraging()) {
             var newDensity = densityViewInfo(selection.dataset, selection.end, selection.start, bars)
             if(newDensity != -1){
-                this.subscribers.updateDataset(newDensity.getBars(), newDensity.getMax())
+                this.subscribers.updateDataset(newDensity.getBars(), newDensity.getMax(),selection.end)
             }
             else{
                 let hackyFix = {
@@ -650,13 +650,13 @@ class View {
                     number: 0,
                     chromosome: this.chromosome
                 }
-                this.subscribers.updateDataset([hackyFix], 100)
+                this.subscribers.updateDataset([hackyFix], constantHeight,selection.end)
             }
             
         }
         else {
 
-            this.subscribers.updateDataset(selection.dataset, 1)
+            this.subscribers.updateDataset(selection.dataset, 1, selection.end)
         }
     }
 
@@ -1010,17 +1010,18 @@ class View {
     checkSelector() {
         return this.selector
     }
-    updateDataset(newInfo, max) {
+    updateDataset(newInfo, max, end) {
         if (newInfo[0] !== undefined) {
             this.chromosome = newInfo[0].chromosome
         }
 
         this.chosenDataset = newInfo
         this.max = max
-        // This is a problem
-        this.end = Math.max.apply(Math, newInfo.map((d) => {
-            return d.end
-        }))
+        // TODO - Leads to fucked up scale, needed for aligning search
+        // this.end = Math.max.apply(Math, newInfo.map((d) => {
+        //     return d.end
+        // }))
+        this.end = end
     }
     withinBounds() {
         return mouseY > this.coordinateY && mouseY < this.coordinateY + this.height && mouseX > this.coordinateX && mouseX < this.width + this.coordinateX
@@ -1384,7 +1385,7 @@ function setup() {
 
     let searchButton = createButton('Search')
     searchButton.position((w * .05) + 200, 60)
-    searchButton.size = 100
+    searchButton.size = constantHeight
     searchButton.class('btn btn-primary')
     searchButton.mousePressed(searchButtonClicked)
 
@@ -1470,7 +1471,7 @@ function draw() {
             }
 
             let number = 0
-            let overViewHeight = 100 / overViewList.length
+            let overViewHeight = constantHeight / overViewList.length
             overViewList.forEach(k => {
                 boxList = []
                 for (x = 0; x < k.length; x++) {
@@ -1498,8 +1499,8 @@ function draw() {
             let selectedChromosome = genomeModel.getAlternateChromosomeData(0)
             let beginning = densityViewInfo(selectedChromosome.data, selectedChromosome.cap, 0, bars)
 
-            second = new View(300, beginning.getBars(), beginning.getMax(), beginning.getChromosome(), 100)
-            second.addSelector(20, 100)
+            second = new View(300, beginning.getBars(), beginning.getMax(), beginning.getChromosome(), constantHeight)
+            second.addSelector(20, constantHeight)
 
             // need some logic around selector
             let secondSubset = second.getSelectorSubset()
@@ -1507,7 +1508,7 @@ function draw() {
 
             let thirdDensity = densityViewInfo(genomeModel.getAlternateChromosomeData(chosenIndex).data, secondSubset.end, secondSubset.start, bars)
 
-            third = new View(450, thirdDensity.getBars(), thirdDensity.getMax(), thirdDensity.getChromosome(), 100)
+            third = new View(450, thirdDensity.getBars(), thirdDensity.getMax(), thirdDensity.getChromosome(), constantHeight)
             third.addSelector(20, 20)
 
             second.addSubscriber(third)
@@ -1515,10 +1516,10 @@ function draw() {
 
             let fourthDensity = densityViewInfo(thirdSubset.dataset, thirdSubset.end, thirdSubset.start, bars)
             if (fourthDensity != -1) {
-                fourth = new View(600, fourthDensity.getBars(), fourthDensity.getMax(), fourthDensity.getChromosome(), 100)
+                fourth = new View(600, fourthDensity.getBars(), fourthDensity.getMax(), fourthDensity.getChromosome(), constantHeight)
             }
             else {
-                fourth = new View(600, thirdDensity.getBars(), thirdDensity.getMax(), thirdDensity.getChromosome(), 100)
+                fourth = new View(600, thirdDensity.getBars(), thirdDensity.getMax(), thirdDensity.getChromosome(), constantHeight)
 
             }
             fourth.noAverage()
@@ -1577,7 +1578,7 @@ function draw() {
                         let index = genomeModel.getChromosomeIndex(searchInformation.chromosome)
                         let endOfRange = genomeModel.getAlternateChromosomeData(index).cap
                         let comparisonViewScale = d3.scaleLinear().domain([0, w]).range([0, endOfRange])
-                        let firstCompression = comparisonViewScale(100)
+                        let firstCompression = comparisonViewScale(constantHeight)
                         let startLocation = contextInformation[contextInformation.findIndex(d => {
                             return d.key == goal.toLowerCase()
                         })].start
@@ -1597,7 +1598,7 @@ function draw() {
                             return x.start > secbeginningFilter && x.end < secendFilter
                         })
 
-                        let orthologView = new View(750 + (200 * Math.floor(i / 2)), secondSubset, 100, searchInformation.chromosome, 100)
+                        let orthologView = new View(750 + (200 * Math.floor(i / 2)), secondSubset, constantHeight, searchInformation.chromosome, constantHeight)
                         orthologView.noAverage()
                         orthologView.makeSelectable()
 
@@ -1671,7 +1672,7 @@ function draw() {
                     bars = w / density_slider.value()
 
                     let thisCouldBeBetter = densityViewInfo(information.data, information.cap, information.start, bars)
-                    second.updateDataset(thisCouldBeBetter.getBars(), thisCouldBeBetter.getMax())
+                    second.updateDataset(thisCouldBeBetter.getBars(), thisCouldBeBetter.getMax(), information.cap)
                     second.updateSubscribers()
                 }
                 if (genomeModel.getHighlightOrthologs()) {
@@ -1709,7 +1710,7 @@ function draw() {
                             while (!viewList[z + c].checkSelector()) {
                                 c++
                             }
-                            viewList[z + c].updateDataset(newSet.getBars(), newSet.getMax())
+                            viewList[z + c].updateDataset(newSet.getBars(), newSet.getMax(),genomeModel.getAlternateChromosomeData(index).cap)
                             altered = true
                         }
                     }
